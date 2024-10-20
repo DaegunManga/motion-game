@@ -37,6 +37,17 @@ class Obstacle(pygame.sprite.Sprite):
             self.kill()
 
 
+class ScoreBox(pygame.sprite.Sprite):
+    def __init__(self, position, size):
+        super().__init__()
+        self.image = pygame.Surface(size)
+        self.rect = self.image.get_rect(topleft=position)
+        self.speed = 5
+
+    def update(self):
+        self.rect.x -= self.speed
+
+
 def draw_landmarks(image, pose_landmarks, pose_connections):
     h, w, _ = image.shape
 
@@ -54,18 +65,31 @@ def draw_landmarks(image, pose_landmarks, pose_connections):
         cv2.circle(image, (cx, cy), 7, (255, 255, 525), 2)
 
 
+def normalize_y_pos(y_pos):
+    if y_pos < UPPER_LIMIT:
+        return 0
+    elif y_pos > LOWER_LIMIT:
+        return 1
+
+    return (y_pos - UPPER_LIMIT) / (LOWER_LIMIT - UPPER_LIMIT)
+
+
 def init_game():
-    global start_time
-    start_time = pygame.time.get_ticks()
+    global current_score
+    current_score = 0
     
     for obstacle in obstacles:
         obstacle.kill()
 
+    for score_box in score_boxes:
+        score_box.kill()
+
 
 def draw_game_screen():
-    player.update(shoulder_y_pos * SCREEN_HEIGHT)
+    player.update(normalized_y_pos * GAME_WINDOW_HEIGHT)
     player.draw(screen)
 
+    score_boxes.update()
     obstacles.update()
     obstacles.draw(screen)
 
@@ -79,7 +103,7 @@ def draw_game_screen():
 def draw_start_screen():
     font = pygame.font.Font(None, 80)
     text = font.render("Press any key to start", True, WHITE)
-    text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+    text_rect = text.get_rect(center=(GAME_WINDOW_WIDTH // 2, GAME_WINDOW_HEIGHT // 2))
     screen.blit(text, text_rect)
 
 
@@ -91,7 +115,7 @@ options = vision.PoseLandmarkerOptions(
 landmarker = vision.PoseLandmarker.create_from_options(options)
 
 pygame.init()
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+screen = pygame.display.set_mode((GAME_WINDOW_WIDTH, GAME_WINDOW_HEIGHT))
 pygame.display.set_caption("Motion Game")
 clock = pygame.time.Clock()
 game_font = pygame.font.Font(None, 24)
@@ -99,7 +123,8 @@ game_font = pygame.font.Font(None, 24)
 best_score = 0
 current_score = 0
 
-player = Player(position=(100, SCREEN_HEIGHT // 2), size=(50, 50))
+player = Player(position=(100, GAME_WINDOW_HEIGHT // 2), size=(50, 50))
+score_boxes = pygame.sprite.Group()
 obstacles = pygame.sprite.Group()
 obstacle_spawn_time = pygame.time.get_ticks()
 
@@ -125,22 +150,30 @@ while running:
     result = landmarker.detect_for_video(mp_image, int(time.time() * 1000))
 
     if result.pose_landmarks:
-        for landmarks in result.pose_landmarks:
-            draw_landmarks(frame, landmarks, POSE_CONNECTIONS)
-            shoulder_y_pos = (landmarks[11].y + landmarks[12].y) / 2
+        landmarks = result.pose_landmarks[0]
+        draw_landmarks(frame, result.pose_landmarks[0], POSE_CONNECTIONS)
+        shoulder_y_pos = (landmarks[11].y + landmarks[12].y) / 2
+        normalized_y_pos = normalize_y_pos(shoulder_y_pos * CAMERA_WINDOW_HEIGHT)
+    
 
     frame = cv2.flip(frame, 1)
-    frame = cv2.resize(frame, (800, 450), cv2.INTER_LINEAR)
+    frame = cv2.resize(frame, (CAMERA_WINDOW_WIDTH, CAMERA_WINDOW_HEIGHT))
+
+    cv2.line(frame, (0, UPPER_LIMIT), (CAMERA_WINDOW_WIDTH, UPPER_LIMIT), (0, 0, 255), 2)
+    cv2.line(frame, (0, LOWER_LIMIT), (CAMERA_WINDOW_WIDTH, LOWER_LIMIT), (0, 0, 255), 2)
     cv2.imshow("Pose Camera", frame)
 
     screen.fill(BLACK)
 
     if start:
         if pygame.time.get_ticks() - obstacle_spawn_time >= OBSTACLE_COOLDOWN:
-            space_y_pos = random.randint(0, SCREEN_HEIGHT - SPACE_HEIGHT)
-            upper_obstacle = Obstacle(position=(SCREEN_WIDTH, 0), size=(40, space_y_pos))
-            lower_obstacle = Obstacle(position=(SCREEN_WIDTH, space_y_pos + SPACE_HEIGHT), 
-                                        size=(40, SCREEN_HEIGHT - space_y_pos - SPACE_HEIGHT))
+            space_y_pos = random.randint(0, GAME_WINDOW_HEIGHT - SPACE_HEIGHT)
+            score_box = ScoreBox(position=(GAME_WINDOW_WIDTH, space_y_pos), size=(40, SPACE_HEIGHT))
+            score_boxes.add(score_box)
+
+            upper_obstacle = Obstacle(position=(GAME_WINDOW_WIDTH, 0), size=(40, space_y_pos))
+            lower_obstacle = Obstacle(position=(GAME_WINDOW_WIDTH, space_y_pos + SPACE_HEIGHT), 
+                                        size=(40, GAME_WINDOW_HEIGHT - space_y_pos - SPACE_HEIGHT))
             obstacles.add(upper_obstacle)
             obstacles.add(lower_obstacle)
             
@@ -150,8 +183,9 @@ while running:
             current_score = 0
             start = False
 
-        current_score = (pygame.time.get_ticks() - start_time) // 100
-        best_score = max(current_score, best_score)
+        if pygame.sprite.spritecollide(player, score_boxes, True):
+            current_score += 1
+            best_score = max(current_score, best_score)
 
         draw_game_screen()
     else:
