@@ -48,21 +48,13 @@ class ScoreBox(pygame.sprite.Sprite):
         self.rect.x -= self.speed
 
 
-def draw_landmarks(image, pose_landmarks, pose_connections):
+def draw_landmarks(image, pose_landmarks):
     h, w, _ = image.shape
-
-    for start_idx, end_idx in pose_connections:
-        start_point = (int(pose_landmarks[start_idx].x * w), 
-                       int(pose_landmarks[start_idx].y * h))
-        end_point = (int(pose_landmarks[end_idx].x * w), 
-                     int(pose_landmarks[end_idx].y * h))
-        cv2.line(image, start_point, end_point, (255, 255, 255), 3)
-
-    for landmark in pose_landmarks:
-        cx = int(landmark.x * w)
-        cy = int(landmark.y * h)
-        cv2.circle(image, (cx, cy), 7, (0, 165, 255), cv2.FILLED)
-        cv2.circle(image, (cx, cy), 7, (255, 255, 525), 2)
+    start_point = (int(pose_landmarks[LEFT_SHOULDER].x * w), 
+                   int(pose_landmarks[LEFT_SHOULDER].y * h))
+    end_point = (int(pose_landmarks[RIGHT_SHOULDER].x * w), 
+                 int(pose_landmarks[RIGHT_SHOULDER].y * h))
+    cv2.line(image, start_point, end_point, (0, 0, 255), 5)
 
 
 def normalize_y_pos(y_pos):
@@ -145,22 +137,22 @@ while running:
     if not ret:
         running = False
 
+    frame = cv2.flip(frame, 1)
+    frame = cv2.resize(frame, (CAMERA_WINDOW_WIDTH, CAMERA_WINDOW_HEIGHT))
+    frame = frame[:, CAMERA_WINDOW_MARGIN:CAMERA_WINDOW_WIDTH-CAMERA_WINDOW_MARGIN]
+
     rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
     result = landmarker.detect_for_video(mp_image, int(time.time() * 1000))
 
     if result.pose_landmarks:
         landmarks = result.pose_landmarks[0]
-        draw_landmarks(frame, result.pose_landmarks[0], POSE_CONNECTIONS)
-        shoulder_y_pos = (landmarks[11].y + landmarks[12].y) / 2
+        draw_landmarks(frame, result.pose_landmarks[0])
+        shoulder_y_pos = (landmarks[LEFT_SHOULDER].y + landmarks[RIGHT_SHOULDER].y) / 2
         normalized_y_pos = normalize_y_pos(shoulder_y_pos * CAMERA_WINDOW_HEIGHT)
-    
 
-    frame = cv2.flip(frame, 1)
-    frame = cv2.resize(frame, (CAMERA_WINDOW_WIDTH, CAMERA_WINDOW_HEIGHT))
-
-    cv2.line(frame, (0, UPPER_LIMIT), (CAMERA_WINDOW_WIDTH, UPPER_LIMIT), (0, 0, 255), 2)
-    cv2.line(frame, (0, LOWER_LIMIT), (CAMERA_WINDOW_WIDTH, LOWER_LIMIT), (0, 0, 255), 2)
+    cv2.line(frame, (0, UPPER_LIMIT), (CAMERA_WINDOW_WIDTH, UPPER_LIMIT), (0, 0, 255), 5)
+    cv2.line(frame, (0, LOWER_LIMIT), (CAMERA_WINDOW_WIDTH, LOWER_LIMIT), (0, 0, 255), 5)
     cv2.imshow("Pose Camera", frame)
 
     screen.fill(BLACK)
