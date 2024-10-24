@@ -85,11 +85,9 @@ def draw_game_screen():
     obstacles.update()
     obstacles.draw(screen)
 
-    current_score_text = game_font.render(f"Your Score: {current_score}", True, WHITE)
-    screen.blit(current_score_text, (20, 20))
-
-    best_score_text = game_font.render(f"Best Score: {best_score}", True, WHITE)
-    screen.blit(best_score_text, (20, 50))
+    score_text = game_font.render(f"{current_score}", True, WHITE)
+    score_rect = score_text.get_rect(topright=(GAME_WINDOW_WIDTH - 20, 20))
+    screen.blit(score_text, score_rect)
 
 
 def draw_start_screen():
@@ -97,6 +95,21 @@ def draw_start_screen():
     text = font.render("Press any key to start", True, WHITE)
     text_rect = text.get_rect(center=(GAME_WINDOW_WIDTH // 2, GAME_WINDOW_HEIGHT // 2))
     screen.blit(text, text_rect)
+
+
+def draw_over_screen():
+    font = pygame.font.Font(None, 64)
+    text_list = [
+        "Game Over!", 
+        f"Your Score: {current_score}", 
+        f"High Score: {best_score}", 
+        "Press any key to start",
+    ]
+    for i, text in enumerate(text_list):
+        text_pos = (GAME_WINDOW_WIDTH // 2, GAME_WINDOW_HEIGHT // 2 - 100 + i * 50)
+        text_surf = font.render(text, True, WHITE)
+        text_rect = text_surf.get_rect(center=text_pos)
+        screen.blit(text_surf, text_rect)
 
 
 cap = cv2.VideoCapture(0)
@@ -110,7 +123,7 @@ pygame.init()
 screen = pygame.display.set_mode((GAME_WINDOW_WIDTH, GAME_WINDOW_HEIGHT))
 pygame.display.set_caption("Motion Game")
 clock = pygame.time.Clock()
-game_font = pygame.font.Font(None, 24)
+game_font = pygame.font.Font(None, 64)
 
 best_score = 0
 current_score = 0
@@ -122,6 +135,7 @@ obstacle_spawn_time = pygame.time.get_ticks()
 
 running = True
 start = False
+is_over = False
 
 while running:
     clock.tick(60)
@@ -129,7 +143,10 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         if event.type == pygame.KEYDOWN:
-            if not start:
+            if is_over:
+                is_over = False
+                init_game()
+            elif not start:
                 start = True
                 init_game()
 
@@ -157,7 +174,9 @@ while running:
 
     screen.fill(BLACK)
 
-    if start:
+    if is_over:
+        draw_over_screen()
+    elif start:
         if pygame.time.get_ticks() - obstacle_spawn_time >= OBSTACLE_COOLDOWN:
             space_y_pos = random.randint(0, GAME_WINDOW_HEIGHT - SPACE_HEIGHT)
             score_box = ScoreBox(position=(GAME_WINDOW_WIDTH, space_y_pos), size=(40, SPACE_HEIGHT))
@@ -172,8 +191,7 @@ while running:
             obstacle_spawn_time = pygame.time.get_ticks()
 
         if pygame.sprite.spritecollide(player, obstacles, False):
-            current_score = 0
-            start = False
+            is_over = True
 
         if pygame.sprite.spritecollide(player, score_boxes, True):
             current_score += 1
